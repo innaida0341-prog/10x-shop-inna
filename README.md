@@ -2,7 +2,7 @@
 
 A React + TypeScript + Tailwind CSS v4 online shop built with the DummyJSON API (graduation project, FULL scope).
 
-**Live demo:** _add your Vercel/Netlify link here_
+**Live demo:** https://10x-shop-inna.vercel.app
 
 ## Features
 **CORE:** login simulation (React Context), catalog, product details, cart (add / quantity / remove / totals), checkout with controlled form and local order confirmation, responsive layout, Error Boundary, 404 page.
