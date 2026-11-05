@@ -1,41 +1,28 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from 'react';
-import { themeStorage } from '../models/storage';
-import type { Theme } from '../utils/guards';
+// src/context/ThemeContext.tsx
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-interface ThemeContextValue {
-  theme: Theme;
-  toggleTheme: () => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+interface ThemeContextType { theme: 'light' | 'dark'; toggle: () => void; }
+const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => themeStorage.get() ?? 'light');
+  const [theme, setTheme] = useState<'light' | 'dark'>(
+    () => (localStorage.getItem('shop_theme') as 'light' | 'dark') || 'light'
+  );
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    themeStorage.set(theme);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('shop_theme', theme);
   }, [theme]);
 
-  const toggleTheme = useCallback(
-    () => setTheme((t) => (t === 'light' ? 'dark' : 'light')),
-    [],
-  );
-
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider value={{ theme, toggle: () => setTheme(t => t === 'dark' ? 'light' : 'dark') }}>
+      {children}
+    </ThemeContext.Provider>
   );
 }
 
-export function useTheme(): ThemeContextValue {
+export const useTheme = () => {
   const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error('useTheme must be used inside ThemeProvider');
+  if (!ctx) throw new Error('useTheme must be inside ThemeProvider');
   return ctx;
-}
+};

@@ -1,34 +1,54 @@
-import { lazy } from 'react';
+import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
-import { Layout } from '../components/layout/Layout';
+import { Layout } from '@/components/layout/Layout';
 import { ProtectedRoute } from './ProtectedRoute';
 
-const CatalogPage = lazy(() => import('../pages/CatalogPage').then((m) => ({ default: m.CatalogPage })));
-const ProductPage = lazy(() => import('../pages/ProductPage').then((m) => ({ default: m.ProductPage })));
-const CartPage = lazy(() => import('../pages/CartPage').then((m) => ({ default: m.CartPage })));
-const LoginPage = lazy(() => import('../pages/LoginPage').then((m) => ({ default: m.LoginPage })));
-const CheckoutPage = lazy(() => import('../pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })));
-const OrdersPage = lazy(() => import('../pages/OrdersPage').then((m) => ({ default: m.OrdersPage })));
-const OrderDetailsPage = lazy(() => import('../pages/OrderDetailsPage').then((m) => ({ default: m.OrderDetailsPage })));
-const ProfilePage = lazy(() => import('../pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
-const NotFoundPage = lazy(() => import('../pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
+// ✅ CatalogPage და CartPage — ახლა default exports (ჩვენ გავასწორეთ)
+const CatalogPage = lazy(() => import('@/pages/CatalogPage'));
+const CartPage = lazy(() => import('@/pages/CartPage'));
+
+// ✅ OrdersPage — named export (ისევ .then() სჭირდება)
+const OrdersPage = lazy(() => import('@/pages/OrdersPage').then(m => ({ default: m.OrdersPage })));
+
+// ✅ დანარჩენები — default exports
+const ProductPage = lazy(() => import('@/pages/ProductPage'));
+const CheckoutPage = lazy(() => import('@/pages/CheckoutPage'));
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+
+function Spinner() {
+  return (
+    <div className="flex justify-center py-12">
+      <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+function NotFound() {
+  return (
+    <div className="text-center py-20">
+      <h1 className="text-3xl font-bold mb-2">Page not found</h1>
+      <p className="text-gray-500 mb-4">The page you are looking for does not exist.</p>
+      <a href="/" className="text-indigo-600 hover:underline">Go to catalog</a>
+    </div>
+  );
+}
 
 export function AppRoutes() {
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<CatalogPage />} />
-        <Route path="login" element={<LoginPage />} />
-        <Route path="products/:id" element={<ProductPage />} />
-        <Route path="cart" element={<CartPage />} />
-        <Route element={<ProtectedRoute />}>
-          <Route path="checkout" element={<CheckoutPage />} />
-          <Route path="orders" element={<OrdersPage />} />
-          <Route path="orders/:id" element={<OrderDetailsPage />} />
-          <Route path="profile" element={<ProfilePage />} />
+    <Suspense fallback={<Spinner />}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<CatalogPage />} />
+          <Route path="products/:id" element={<ProductPage />} />
+          <Route path="cart" element={<CartPage />} />
+          <Route path="login" element={<LoginPage />} />
+          <Route path="checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+          <Route path="orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
+          <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+          <Route path="*" element={<NotFound />} />
         </Route>
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }

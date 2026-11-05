@@ -1,79 +1,63 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { Formik, Form, Field, ErrorMessage } from 'formik';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { TextField } from '../components/ui/TextField';
-import { useAuth } from '../context/AuthContext';
-import { hasFromState } from '../utils/guards.extra';
-import type { LoginFormValues } from '../types/user';
+import { useAuth } from '@/context/AuthContext';
+import { loginSchema } from '@/utils/validation';
 
-type Errors = Partial<Record<keyof LoginFormValues, string>>;
-
-function validate(v: LoginFormValues): Errors {
-  const errors: Errors = {};
-  if (!v.username.trim()) errors.username = 'Username is required';
-  if (!v.password) errors.password = 'Password is required';
-  else if (v.password.length < 6) errors.password = 'Password must be at least 6 characters';
-  return errors;
-}
-
-export function LoginPage() {
+export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = hasFromState(location.state) ? location.state.from : '/';
-
-  const [values, setValues] = useState<LoginFormValues>({ username: '', password: '' });
-  const [errors, setErrors] = useState<Errors>({});
-
-  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setValues((prev) => ({ ...prev, [name]: value }));
-    if (errors[name as keyof LoginFormValues]) {
-      setErrors((prev) => ({ ...prev, [name]: undefined }));
-    }
-  };
-
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const found = validate(values);
-    setErrors(found);
-    if (Object.keys(found).length > 0) return;
-    login(values.username);
-    navigate(from, { replace: true });
-  };
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
 
   return (
-    <div className="mx-auto max-w-sm">
-      <form onSubmit={handleSubmit} noValidate className="card space-y-4 p-6">
-        <h1 className="text-2xl font-bold">Log in</h1>
-        {from === '/checkout' && (
-          <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800 dark:bg-blue-950 dark:text-blue-200">
-            Please log in to continue to checkout.
-          </p>
-        )}
-        <TextField
-          id="username"
-          label="Username"
-          value={values.username}
-          onChange={handleChange}
-          error={errors.username}
-          autoComplete="username"
-        />
-        <TextField
-          id="password"
-          label="Password"
-          type="password"
-          value={values.password}
-          onChange={handleChange}
-          error={errors.password}
-          autoComplete="current-password"
-        />
-        <button type="submit" className="btn-primary w-full">
-          Log In
-        </button>
-        <Link to="/" className="block text-center text-sm text-primary hover:underline">
-          ← Back to catalog
-        </Link>
-      </form>
+    <div className="max-w-md mx-auto mt-8">
+      <Link to="/" className="text-sm text-brand-600 hover:underline">← Back to catalog</Link>
+      <div className="mt-4 p-6 bg-white dark:bg-gray-800 rounded-xl shadow">
+        <h1 className="text-2xl font-bold mb-4">Log in</h1>
+        <Formik
+          initialValues={{ username: '', password: '' }}
+          validationSchema={loginSchema}
+          onSubmit={(values, { setSubmitting }) => {
+            setTimeout(() => {
+              login(values.username);
+              setSubmitting(false);
+              navigate(from, { replace: true });
+            }, 400);
+          }}
+        >
+          {({ isSubmitting, errors, touched }) => (
+            <Form className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Username</label>
+                <Field
+                  name="username"
+                  className={`w-full px-3 py-2 rounded-md border bg-white dark:bg-gray-900 ${
+                    touched.username && errors.username ? 'border-rose-500' : 'border-gray-300 dark:border-gray-700'
+                  }`}
+                />
+                <ErrorMessage name="username" component="div" className="text-xs text-rose-500 mt-1" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Password</label>
+                <Field
+                  name="password"
+                  type="password"
+                  className={`w-full px-3 py-2 rounded-md border bg-white dark:bg-gray-900 ${
+                    touched.password && errors.password ? 'border-rose-500' : 'border-gray-300 dark:border-gray-700'
+                  }`}
+                />
+                <ErrorMessage name="password" component="div" className="text-xs text-rose-500 mt-1" />
+              </div>
+              <button
+                disabled={isSubmitting}
+                className="w-full py-2.5 bg-brand-600 text-white rounded-md hover:bg-brand-700 disabled:opacity-50"
+              >
+                {isSubmitting ? 'Logging in…' : 'Log In'}
+              </button>
+            </Form>
+          )}
+        </Formik>
+      </div>
     </div>
   );
 }

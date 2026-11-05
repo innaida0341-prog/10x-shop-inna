@@ -1,104 +1,91 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { Formik, Form, Field, ErrorMessage } from 'formik';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TextField } from '../components/ui/TextField';
-import { useAuth } from '../context/AuthContext';
-import { useCart } from '../context/CartContext';
-import { useTheme } from '../context/ThemeContext';
-import { useToast } from '../context/ToastContext';
-import { ordersStorage, reviewsStorage } from '../models/storage';
-import type { ProfileFormValues } from '../types/user';
-import { isValidEmail, isValidPhone } from '../utils/validation';
+import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
+import { profileSchema } from '@/utils/validation';
 
-type Errors = Partial<Record<keyof ProfileFormValues, string>>;
-
-function validate(v: ProfileFormValues): Errors {
-  const e: Errors = {};
-  if (v.firstName.trim().length < 2) e.firstName = 'First name must be at least 2 characters';
-  if (v.lastName.trim().length < 2) e.lastName = 'Last name must be at least 2 characters';
-  if (!isValidEmail(v.email)) e.email = 'Please enter a valid email address';
-  if (v.phone.trim() && !isValidPhone(v.phone)) e.phone = 'Please enter a valid phone number';
-  return e;
-}
-
-export function ProfilePage() {
-  const { user, updateProfile, logout } = useAuth();
-  const { clear } = useCart();
-  const { theme, toggleTheme } = useTheme();
-  const { showToast } = useToast();
+export default function ProfilePage() {
+  const { user, logout } = useAuth();
+  const { theme, toggle } = useTheme(); // ✅ toggle და არა toggleTheme
   const navigate = useNavigate();
+  const [saved, setSaved] = useState(false);
 
-  const [values, setValues] = useState<ProfileFormValues>({
-    firstName: user.firstName ?? '',
-    lastName: user.lastName ?? '',
-    email: user.email ?? '',
-    phone: user.phone ?? '',
+  const [profile, setProfile] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('shop_profile') || 'null') || {
+        firstName: user?.username || '',
+        lastName: '',
+        email: '',
+        phone: ''
+      };
+    } catch {
+      return { firstName: user?.username || '', lastName: '', email: '', phone: '' };
+    }
   });
-  const [errors, setErrors] = useState<Errors>({});
-
-  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setValues((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSave = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const found = validate(values);
-    setErrors(found);
-    if (Object.keys(found).length > 0) return;
-    updateProfile({
-      firstName: values.firstName.trim(),
-      lastName: values.lastName.trim(),
-      email: values.email.trim(),
-      phone: values.phone.trim(),
-    });
-    showToast('Profile saved ✓');
-  };
-
-  const handleClearData = () => {
-    if (!window.confirm('Clear cart, orders and reviews? Your session and theme are kept.')) return;
-    clear();
-    ordersStorage.remove();
-    reviewsStorage.remove();
-    showToast('Local data cleared');
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <h1 className="text-2xl font-bold">Profile</h1>
-      <p className="text-gray-600 dark:text-gray-400">Signed in as {user.username}</p>
+    <div className="max-w-2xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">Profile</h1>
 
-      <form onSubmit={handleSave} noValidate className="card space-y-4 p-6">
-        <div className="grid gap-4 md:grid-cols-2">
-          <TextField id="firstName" label="First name" value={values.firstName} onChange={handleChange} error={errors.firstName} autoComplete="given-name" />
-          <TextField id="lastName" label="Last name" value={values.lastName} onChange={handleChange} error={errors.lastName} autoComplete="family-name" />
+      <Formik
+        initialValues={profile}
+        enableReinitialize
+        validationSchema={profileSchema}
+        onSubmit={(values) => {
+          setProfile(values);
+          localStorage.setItem('shop_profile', JSON.stringify(values));
+          setSaved(true);
+          setTimeout(() => setSaved(false), 2000);
+        }}
+      >
+        {({ errors, touched }) => (
+          <Form className="bg-white rounded-xl p-5 mb-4 space-y-3 shadow">
+            <h2 className="font-semibold">Edit profile</h2>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">First name</label>
+                <Field name="firstName" className={`w-full px-3 py-2 rounded-md border ${touched.firstName && errors.firstName ? 'border-rose-500' : 'border-gray-300'}`} />
+                <ErrorMessage name="firstName" component="div" className="text-xs text-rose-500 mt-1" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Last name</label>
+                <Field name="lastName" className={`w-full px-3 py-2 rounded-md border ${touched.lastName && errors.lastName ? 'border-rose-500' : 'border-gray-300'}`} />
+                <ErrorMessage name="lastName" component="div" className="text-xs text-rose-500 mt-1" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Email</label>
+              <Field name="email" type="email" className={`w-full px-3 py-2 rounded-md border ${touched.email && errors.email ? 'border-rose-500' : 'border-gray-300'}`} />
+              <ErrorMessage name="email" component="div" className="text-xs text-rose-500 mt-1" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Phone (optional)</label>
+              <Field name="phone" className={`w-full px-3 py-2 rounded-md border ${touched.phone && errors.phone ? 'border-rose-500' : 'border-gray-300'}`} />
+              <ErrorMessage name="phone" component="div" className="text-xs text-rose-500 mt-1" />
+            </div>
+            <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Save changes</button>
+            {saved && <p className="text-sm text-emerald-600">✓ Saved!</p>}
+          </Form>
+        )}
+      </Formik>
+
+      <div className="bg-white rounded-xl p-5 flex items-center justify-between shadow">
+        <div>
+          <div className="font-medium">Theme</div>
+          <div className="text-sm text-gray-500">Currently: {theme}</div>
         </div>
-        <TextField id="email" label="Email" type="email" value={values.email} onChange={handleChange} error={errors.email} autoComplete="email" />
-        <TextField id="phone" label="Phone (optional)" type="tel" value={values.phone} onChange={handleChange} error={errors.phone} autoComplete="tel" />
-        <button type="submit" className="btn-primary">
-          Save changes
-        </button>
-      </form>
-
-      <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
-        <span>Theme: {theme}</span>
-        <button type="button" onClick={toggleTheme} className="btn-secondary">
-          Switch to {theme === 'light' ? 'dark' : 'light'}
+        <button onClick={toggle} className="px-4 py-2 rounded-md border border-gray-300 hover:bg-gray-100">
+          {theme === 'dark' ? '☀ Light mode' : '🌙 Dark mode'}
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <button type="button" onClick={handleClearData} className="btn-secondary">
-          Clear local data
-        </button>
-        <button type="button" onClick={handleLogout} className="btn-secondary">
-          Log out
-        </button>
-      </div>
+      <button
+        onClick={() => { logout(); navigate('/'); }}
+        className="w-full mt-4 py-3 bg-gray-900 text-white rounded-md hover:opacity-90"
+      >
+        Log out
+      </button>
     </div>
   );
 }

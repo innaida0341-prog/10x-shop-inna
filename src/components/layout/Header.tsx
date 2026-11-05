@@ -12,7 +12,7 @@ const linkClass = ({ isActive }: { isActive: boolean }): string =>
 export function Header() {
   const { user, logout } = useAuth();
   const { itemCount } = useCart();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
@@ -72,7 +72,7 @@ export function Header() {
           )}
           <button
             type="button"
-            onClick={toggleTheme}
+            onClick={toggle}
             aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
             className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
           >

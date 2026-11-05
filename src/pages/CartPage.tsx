@@ -6,7 +6,7 @@ import { useToast } from '../context/ToastContext';
 import { Cart } from '../models/Cart';
 import { formatPrice } from '../utils/format';
 
-export function CartPage() {
+export default function CartPage() {
   const { items, cart, promoCode, setQuantity, removeItem, clear, applyPromo, removePromo } = useCart();
   const { showToast } = useToast();
   const navigate = useNavigate();
