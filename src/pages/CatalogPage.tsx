@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+} from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { fetchCategories, fetchProducts } from '../api/products.api';
 import { ProductGrid } from '../components/product/ProductGrid';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -13,10 +20,6 @@ import type { CatalogParams, Product, SortOption } from '../types/product';
 import { toCartItem } from '../utils/cart';
 import { PAGE_SIZE } from '../utils/url';
 
-/**
- * Sort options per P2.6
- * Default | Price: low to high | Price: high to low | Rating: high to low | Name A→Z
- */
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: '', label: 'Default' },
   { value: 'price-asc', label: 'Price: low to high' },
@@ -25,61 +28,81 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'title-asc', label: 'Name A → Z' },
 ];
 
-/** Parse URL sort param into a valid SortOption; fallback to '' if invalid. */
 function parseSort(value: string | null): SortOption {
-  return SORT_OPTIONS.some((o) => o.value === value) ? (value as SortOption) : '';
+  return SORT_OPTIONS.some((option) => option.value === value)
+    ? (value as SortOption)
+    : '';
 }
 
 export default function CatalogPage() {
-  // Contexs
   const { addItem } = useCart();
   const { showToast } = useToast();
 
-  // ── URL is the single source of truth (P2.8) ────────────────────────
   const [searchParams, setSearchParams] = useSearchParams();
+
   const q = searchParams.get('q') ?? '';
   const category = searchParams.get('category') ?? '';
   const sort = parseSort(searchParams.get('sort'));
-  const pageParam = Number(searchParams.get('page'));
-  const page = Number.isInteger(pageParam) && pageParam >= 1 ? pageParam : 1;
 
-  /**
-   * Update URL params atomically.
-   * - null value removes the param
-   * - resetPage=true resets to page 1 (P2.6: filter change resets pagination)
-   */
+  const pageParam = Number(searchParams.get('page'));
+  const page =
+    Number.isInteger(pageParam) && pageParam >= 1 ? pageParam : 1;
+
+  // replace=true updates the current history entry.
+  // replace=false creates a new history entry.
   const updateParams = useCallback(
-    (changes: Record<string, string | null>, resetPage = true) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        for (const [key, value] of Object.entries(changes)) {
-          if (value) next.set(key, value);
-          else next.delete(key);
-        }
-        if (resetPage) next.delete('page');
-        return next;
-      }, { replace: true });
+    (
+      changes: Record<string, string | null>,
+      resetPage = true,
+      replace = false,
+    ) => {
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+
+          for (const [key, value] of Object.entries(changes)) {
+            if (value) {
+              next.set(key, value);
+            } else {
+              next.delete(key);
+            }
+          }
+
+          if (resetPage) {
+            next.delete('page');
+          }
+
+          return next;
+        },
+        { replace },
+      );
     },
     [setSearchParams],
   );
 
-  // ── Search with 400ms debounce (P2.4) ───────────────────────────────
+  // Search with debounce
   const [searchInput, setSearchInput] = useState(q);
   const debouncedSearch = useDebounce(searchInput, 400);
 
-  // When debounced value changes, update URL. Search clears category (P2.4).
   useEffect(() => {
     const term = debouncedSearch.trim();
-    if (term !== q) updateParams({ q: term || null, category: null });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch]);
 
-  // Keep input in sync when URL changes (Back, Clear filters)
+    if (term !== q) {
+      // Search typing replaces the current history entry
+      // to avoid creating one entry for every search.
+      updateParams(
+        { q: term || null, category: null },
+        true,
+        true,
+      );
+    }
+  }, [debouncedSearch, q, updateParams]);
+
+  // Keep the input synchronized with browser Back/Forward.
   useEffect(() => {
     setSearchInput(q);
   }, [q]);
 
-  // ── Build API params (memoized to avoid refetch loops) ──────────────
   const params: CatalogParams = useMemo(
     () => ({
       q: q || undefined,
@@ -91,27 +114,30 @@ export default function CatalogPage() {
     [q, category, sort, page],
   );
 
-  // ── Data fetching via custom useFetch hook (supports AbortController) ─
   const productsFetcher = useCallback(
     (signal: AbortSignal) => fetchProducts(params, signal),
     [params],
   );
-  const { state, retry } = useFetch(productsFetcher, 'Could not load products');
+
+  const {
+    state,
+    retry: retryProducts,
+  } = useFetch(productsFetcher, 'Could not load products');
 
   const categoriesFetcher = useCallback(
     (signal: AbortSignal) => fetchCategories(signal),
     [],
   );
-  const { state: categoriesState } = useFetch(categoriesFetcher, 'Could not load categories');
 
-  // ── Handlers ─────────────────────────────────────────────────────────
-  /**
-   * Add product to cart with stock validation (P3.3).
-   * Uses CartContext's AddResult discriminated union for precise feedback.
-   */
+  const {
+    state: categoriesState,
+    retry: retryCategories,
+  } = useFetch(categoriesFetcher, 'Could not load categories');
+
   const handleAdd = useCallback(
     (product: Product) => {
       const result = addItem(toCartItem(product));
+
       if (result.ok) {
         showToast('Added to cart ✓');
       } else {
@@ -121,24 +147,36 @@ export default function CatalogPage() {
     [addItem, showToast],
   );
 
-  const handlePageChange = (next: number) => {
-    updateParams({ page: next > 1 ? String(next) : null }, false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const handlePageChange = (nextPage: number) => {
+    updateParams(
+      { page: nextPage > 1 ? String(nextPage) : null },
+      false,
+    );
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
   };
 
-  // ── Derived values ───────────────────────────────────────────────────
+  const handleClearFilters = () => {
+    setSearchInput('');
+    setSearchParams({}, { replace: true });
+  };
+
   const hasFilters = Boolean(q || category || sort);
+
   const total = state.status === 'success' ? state.data.total : 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to = Math.min(page * PAGE_SIZE, total);
 
-  // ── Render ───────────────────────────────────────────────────────────
   return (
     <section className="space-y-6">
-      {/* Header */}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-3xl font-bold">Catalog</h1>
+
         {state.status === 'success' && (
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {total} product{total !== 1 ? 's' : ''} found
@@ -146,115 +184,140 @@ export default function CatalogPage() {
         )}
       </div>
 
-      {/* Toolbar: search + category + sort */}
+      {/* Search, category and sorting */}
       <div className="grid gap-3 md:grid-cols-3">
-        {/* Search (P2.4) */}
         <div>
           <label htmlFor="search" className="sr-only">
             Search products
           </label>
+
           <input
             id="search"
             type="search"
             value={searchInput}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchInput(e.target.value)}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              setSearchInput(event.target.value)
+            }
             placeholder="Search products…"
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
         </div>
 
-        {/* Category (P2.5) */}
         <div>
           <label htmlFor="category" className="sr-only">
             Category
           </label>
+
           <select
             id="category"
             value={category}
-            onChange={(e) => {
+            onChange={(event) => {
               setSearchInput('');
-              updateParams({ category: e.target.value || null, q: null });
+
+              updateParams({
+                category: event.target.value || null,
+                q: null,
+              });
             }}
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm capitalize focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 text-sm capitalize focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           >
             <option value="">All categories</option>
+
             {categoriesState.status === 'success' &&
-              categoriesState.data.map((c) => (
-                <option key={c.slug} value={c.slug}>
-                  {c.name}
+              categoriesState.data.map((item) => (
+                <option key={item.slug} value={item.slug}>
+                  {item.name}
                 </option>
               ))}
           </select>
         </div>
 
-        {/* Sort (P2.6) */}
         <div>
           <label htmlFor="sort" className="sr-only">
             Sort by
           </label>
+
           <select
             id="sort"
             value={sort}
-            onChange={(e) => updateParams({ sort: e.target.value || null })}
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            onChange={(event) =>
+              updateParams({
+                sort: event.target.value || null,
+              })
+            }
+            className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
         </div>
       </div>
 
-      {/* Error state (P2.2) */}
-      {state.status === 'error' && (
-        <ErrorMessage message={state.message} onRetry={retry} />
+      {/* Category loading error */}
+      {categoriesState.status === 'error' && (
+        <ErrorMessage
+          message={categoriesState.message}
+          onRetry={retryCategories}
+        />
       )}
 
-      {/* Loading state with skeletons (P2.2 FULL) */}
+      {/* Product loading error */}
+      {state.status === 'error' && (
+        <ErrorMessage
+          message={state.message}
+          onRetry={retryProducts}
+        />
+      )}
+
+      {/* Product skeletons */}
       {(state.status === 'loading' || state.status === 'idle') && (
         <div
-          className="grid grid-cols-1 gap-4 min-[481px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          className="grid grid-cols-1 gap-4 min-[481px]:grid-cols-2 lg:grid-cols-3 min-[1025px]:grid-cols-4"
           role="status"
           aria-label="Loading products"
         >
-          {Array.from({ length: 8 }, (_, i) => (
-            <ProductCardSkeleton key={i} />
+          {Array.from({ length: 8 }, (_, index) => (
+            <ProductCardSkeleton key={index} />
           ))}
         </div>
       )}
 
-      {/* Success state */}
+      {/* Product results */}
       {state.status === 'success' && (
         <>
           {state.data.products.length === 0 ? (
-            /* Empty state (P2.3) */
             <div className="py-16 text-center">
-              <p className="text-lg text-gray-600 dark:text-gray-300">No products found.</p>
+              <p className="text-lg text-gray-600 dark:text-gray-300">
+                No products found.
+              </p>
+
               {hasFilters && (
-                <Link
-                  to="/"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setSearchInput('');
-                    setSearchParams({}, { replace: true });
-                  }}
-                  className="mt-4 inline-block rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="mt-4 min-h-11 rounded-md border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                 >
                   Clear filters
-                </Link>
+                </button>
               )}
             </div>
           ) : (
             <>
-              <ProductGrid products={state.data.products} onAdd={handleAdd} />
+              <ProductGrid
+                products={state.data.products}
+                onAdd={handleAdd}
+              />
+
               <div className="mt-8 space-y-3">
                 <Pagination
                   page={page}
                   totalPages={totalPages}
                   onChange={handlePageChange}
                 />
+
                 <p className="text-center text-sm text-gray-500 dark:text-gray-400">
                   Showing {from}–{to} of {total}
                 </p>

@@ -1,88 +1,210 @@
+
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
+import type { ProfileFormValues } from '@/types/user';
 import { profileSchema } from '@/utils/validation';
 
-export default function ProfilePage() {
-  const { user, logout } = useAuth();
-  const { theme, toggle } = useTheme(); // ✅ toggle და არა toggleTheme
-  const navigate = useNavigate();
-  const [saved, setSaved] = useState(false);
+const getInitialProfile = (username: string): ProfileFormValues => {
+  const fallback: ProfileFormValues = {
+    firstName: username,
+    lastName: '',
+    email: '',
+    phone: '',
+  };
 
-  const [profile, setProfile] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('shop_profile') || 'null') || {
-        firstName: user?.username || '',
-        lastName: '',
-        email: '',
-        phone: ''
-      };
-    } catch {
-      return { firstName: user?.username || '', lastName: '', email: '', phone: '' };
-    }
-  });
+  try {
+    const saved = localStorage.getItem('shop_profile');
+
+    if (!saved) return fallback;
+
+    return {
+      ...fallback,
+      ...JSON.parse(saved),
+    };
+  } catch {
+    return fallback;
+  }
+};
+
+export default function ProfilePage() {
+  const { user, logout, updateProfile } = useAuth();
+  const { theme, toggle } = useTheme();
+  const navigate = useNavigate();
+
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  const [profile, setProfile] = useState<ProfileFormValues>(() =>
+    getInitialProfile(user.username),
+  );
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Profile</h1>
+    <div className="mx-auto max-w-2xl space-y-4">
+      <h1 className="text-2xl font-bold">Profile</h1>
 
       <Formik
         initialValues={profile}
         enableReinitialize
         validationSchema={profileSchema}
         onSubmit={(values) => {
-          setProfile(values);
-          localStorage.setItem('shop_profile', JSON.stringify(values));
-          setSaved(true);
-          setTimeout(() => setSaved(false), 2000);
+          try {
+            localStorage.setItem('shop_profile', JSON.stringify(values));
+
+            updateProfile(values);
+            setProfile(values);
+            setSaveError('');
+            setSaved(true);
+
+            window.setTimeout(() => setSaved(false), 2000);
+          } catch {
+            setSaved(false);
+            setSaveError('Could not save profile. Please try again.');
+          }
         }}
       >
         {({ errors, touched }) => (
-          <Form className="bg-white rounded-xl p-5 mb-4 space-y-3 shadow">
+          <Form className="card space-y-4 p-5">
             <h2 className="font-semibold">Edit profile</h2>
-            <div className="grid sm:grid-cols-2 gap-3">
+
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium mb-1">First name</label>
-                <Field name="firstName" className={`w-full px-3 py-2 rounded-md border ${touched.firstName && errors.firstName ? 'border-rose-500' : 'border-gray-300'}`} />
-                <ErrorMessage name="firstName" component="div" className="text-xs text-rose-500 mt-1" />
+                <label
+                  htmlFor="firstName"
+                  className="mb-1 block text-sm font-medium"
+                >
+                  First name
+                </label>
+                <Field
+                  id="firstName"
+                  name="firstName"
+                  className={`input-field ${
+                    touched.firstName && errors.firstName
+                      ? 'border-rose-500'
+                      : ''
+                  }`}
+                />
+                <ErrorMessage
+                  name="firstName"
+                  component="div"
+                  className="mt-1 text-xs text-rose-500"
+                />
               </div>
+
               <div>
-                <label className="block text-sm font-medium mb-1">Last name</label>
-                <Field name="lastName" className={`w-full px-3 py-2 rounded-md border ${touched.lastName && errors.lastName ? 'border-rose-500' : 'border-gray-300'}`} />
-                <ErrorMessage name="lastName" component="div" className="text-xs text-rose-500 mt-1" />
+                <label
+                  htmlFor="lastName"
+                  className="mb-1 block text-sm font-medium"
+                >
+                  Last name
+                </label>
+                <Field
+                  id="lastName"
+                  name="lastName"
+                  className={`input-field ${
+                    touched.lastName && errors.lastName
+                      ? 'border-rose-500'
+                      : ''
+                  }`}
+                />
+                <ErrorMessage
+                  name="lastName"
+                  component="div"
+                  className="mt-1 text-xs text-rose-500"
+                />
               </div>
             </div>
+
             <div>
-              <label className="block text-sm font-medium mb-1">Email</label>
-              <Field name="email" type="email" className={`w-full px-3 py-2 rounded-md border ${touched.email && errors.email ? 'border-rose-500' : 'border-gray-300'}`} />
-              <ErrorMessage name="email" component="div" className="text-xs text-rose-500 mt-1" />
+              <label
+                htmlFor="email"
+                className="mb-1 block text-sm font-medium"
+              >
+                Email
+              </label>
+              <Field
+                id="email"
+                name="email"
+                type="email"
+                className={`input-field ${
+                  touched.email && errors.email ? 'border-rose-500' : ''
+                }`}
+              />
+              <ErrorMessage
+                name="email"
+                component="div"
+                className="mt-1 text-xs text-rose-500"
+              />
             </div>
+
             <div>
-              <label className="block text-sm font-medium mb-1">Phone (optional)</label>
-              <Field name="phone" className={`w-full px-3 py-2 rounded-md border ${touched.phone && errors.phone ? 'border-rose-500' : 'border-gray-300'}`} />
-              <ErrorMessage name="phone" component="div" className="text-xs text-rose-500 mt-1" />
+              <label
+                htmlFor="phone"
+                className="mb-1 block text-sm font-medium"
+              >
+                Phone (optional)
+              </label>
+              <Field
+                id="phone"
+                name="phone"
+                className={`input-field ${
+                  touched.phone && errors.phone ? 'border-rose-500' : ''
+                }`}
+              />
+              <ErrorMessage
+                name="phone"
+                component="div"
+                className="mt-1 text-xs text-rose-500"
+              />
             </div>
-            <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Save changes</button>
-            {saved && <p className="text-sm text-emerald-600">✓ Saved!</p>}
+
+            <button type="submit" className="btn-primary min-h-11">
+              Save changes
+            </button>
+
+            {saved && (
+              <p role="status" className="text-sm text-emerald-600">
+                ✓ Profile saved successfully!
+              </p>
+            )}
+
+            {saveError && (
+              <p role="alert" className="text-sm text-rose-500">
+                {saveError}
+              </p>
+            )}
           </Form>
         )}
       </Formik>
 
-      <div className="bg-white rounded-xl p-5 flex items-center justify-between shadow">
+      <section className="card flex items-center justify-between gap-4 p-5">
         <div>
-          <div className="font-medium">Theme</div>
-          <div className="text-sm text-gray-500">Currently: {theme}</div>
+          <h2 className="font-medium">Theme</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Currently: {theme}
+          </p>
         </div>
-        <button onClick={toggle} className="px-4 py-2 rounded-md border border-gray-300 hover:bg-gray-100">
+
+        <button
+          type="button"
+          onClick={toggle}
+          className="btn-secondary min-h-11"
+        >
           {theme === 'dark' ? '☀ Light mode' : '🌙 Dark mode'}
         </button>
-      </div>
+      </section>
 
       <button
-        onClick={() => { logout(); navigate('/'); }}
-        className="w-full mt-4 py-3 bg-gray-900 text-white rounded-md hover:opacity-90"
+        type="button"
+        onClick={handleLogout}
+        className="min-h-11 w-full rounded-md bg-gray-900 py-3 text-white hover:opacity-90 dark:bg-gray-700"
       >
         Log out
       </button>
